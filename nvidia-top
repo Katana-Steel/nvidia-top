@@ -68,6 +68,10 @@ def count_procs(root):
 
         procs = gpu.findall('processes')
         nproc = nproc + len(procs)
+        procs = gpu.findall('compute_processes')
+        nproc = nproc + len(procs)
+        procs = gpu.findall('accounted_processes')
+        nproc = nproc + len(procs)
 
     return nproc
 
@@ -77,8 +81,10 @@ def display_proc_info(root, scr, start_line):
     pnum = 0
 
     for gpu in root.findall('gpu'):
-        
-        procs = gpu.find('processes')
+        procs = ET.Element('processes')
+        for pro in ['processes', 'compute_processes', 'accounted_processes']:
+            if gpu.find(pro) is not None:
+                procs.extend(gpu.find(pro))
 
         for proc in procs.findall('process_info'):
 
@@ -163,7 +169,8 @@ if __name__ == '__main__':
                 break
                 
     except:
-                
+        crs.endwin()
         print 'Something went wrong! Exception handling is pretty basic right now.'
+        raise
                 
     crs.endwin()
