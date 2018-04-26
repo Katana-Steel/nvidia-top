@@ -170,7 +170,7 @@ if __name__ == '__main__':
                 
     except:
         crs.endwin()
-        print 'Something went wrong! Exception handling is pretty basic right now.'
+        print ('Something went wrong! Exception handling is pretty basic right now.')
         raise
                 
     crs.endwin()
