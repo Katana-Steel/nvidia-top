@@ -1,11 +1,11 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import subprocess as sp
 import xml.etree.ElementTree as ET
-import time
 import curses as crs
 
 pnum_last = 0
+
 
 def display_gpu_info(root, scr, start_line):
 
@@ -13,10 +13,10 @@ def display_gpu_info(root, scr, start_line):
     display = False
 
     for gpu in root.findall('gpu'):
-        
+
         # Name
         name = gpu.find('product_name').text
-        
+
         # Display Usage
         display_active = gpu.find('display_active').text
         if display_active == 'Enabled':
@@ -24,7 +24,7 @@ def display_gpu_info(root, scr, start_line):
 
         # Memory Use
         mem = gpu.find('memory_usage')
-        if (mem == None):
+        if mem is None:
             mem = gpu.find('fb_memory_usage')
 
         memu = mem.find('used').text
@@ -33,23 +33,24 @@ def display_gpu_info(root, scr, start_line):
         nmemt = memt.split()
         memuse = memu + '/' + memt
         usage = float(nmemu[0])*100/float(nmemt[0])
-        
+
         # Power Use
         pow = gpu.find('power_readings')
         upow = pow.find('power_draw').text
         tpow = pow.find('power_limit').text
         powuse = upow + '/' + tpow
-        
+
         # Temp
         temp = gpu.find('temperature')
         temp = temp.find('gpu_temp').text
-        
+
         line = '%3d' % (gpunum+1)
         if display:
             line = line + '%24s*' % name
         else:
             line = line + '%25s' % name
-        line = line + '%20s' % memuse + '%15.2f' % usage + '%20s' % powuse + '%10s' % temp
+        line = line + '%20s' % memuse + '%15.2f' % usage + '%20s' % powuse
+        line = line + '%10s' % temp
 
         scr.addstr(gpunum + start_line, 0, line)
 
@@ -60,20 +61,18 @@ def display_gpu_info(root, scr, start_line):
     else:
         scr.addstr(gpunum + start_line, 0, 'No GPUs Driving System Display')
 
+
 def count_procs(root):
 
     nproc = 0
 
     for gpu in root.findall('gpu'):
-
-        procs = gpu.findall('processes')
-        nproc = nproc + len(procs)
-        procs = gpu.findall('compute_processes')
-        nproc = nproc + len(procs)
-        procs = gpu.findall('accounted_processes')
-        nproc = nproc + len(procs)
+        for pro in ['processes', 'compute_processes', 'accounted_processes']:
+            procs = gpu.findall(pro)
+            nproc = nproc + len(procs)
 
     return nproc
+
 
 def display_proc_info(root, scr, start_line):
 
@@ -93,8 +92,9 @@ def display_proc_info(root, scr, start_line):
             if len(name) > 50:
                 name = name[0:50] + '...'
             memuse = proc.find('used_memory').text
-            
-            line = '%3s' % repr(pnum) + '%8s' % repr(gpunum+1) + '%8s' % pid + '%60s' % name + '%14s' % memuse
+
+            line = '%3s' % repr(pnum) + '%8s' % repr(gpunum+1) + '%8s' % pid
+            line = line + '%60s' % name + '%14s' % memuse
             scr.addstr(pnum + start_line, 0, line)
             pnum = pnum + 1
 
@@ -105,9 +105,41 @@ def display_proc_info(root, scr, start_line):
     pnum_last = pnum
     if (pnum_change < 0):
         # adding blank lines to clear old processes
-        for i in range(0,-1*pnum_change):
-            scr.addstr(pnum + start_line, 0, ' ' * 94)
+        for i in range(0, -1*pnum_change):
+            scr.addstr(pnum + start_line, 0, ' ' * scr.getmaxyx()[1])
             pnum = pnum + 1
+
+
+def redraw_decorations(scr, ngpu, nproc):
+    global gpu_endline, proc_endline, footer_startline
+    width = scr.getmaxyx()[1]
+    min_width = 94
+    if min_width > width:
+        exit_msg.append('terminal too small')
+        raise Exception('terminal too small')
+
+    scr.addstr(0, 0, 'nvidia-top' + '%*s' % (width-10, 'ESC to quit'))
+
+    # Drawing GPU Header
+    gpu_startline = 5
+    scr.addstr(gpu_startline, 0, '-' * width)
+    gpu_header = '%3s' % '#' + '%25s' % 'Name' + '%20s' % 'Mem. Use'
+    gpu_header = gpu_header + '%15s' % 'Mem. Use' + '%20s' % 'Pow. Use'
+    gpu_header = gpu_header + '%10s' % 'Temp.'
+    scr.addstr(gpu_startline + 1, 0, gpu_header)
+    scr.addstr(gpu_startline + 2, 0, '-' * width)
+    gpu_endline = gpu_startline + 3
+    # Drawing Proc Header
+    proc_startline = gpu_endline + ngpu + 2
+    scr.addstr(proc_startline, 0, '-' * width)
+    proc_header = '%3s' % '#' + '%8s' % 'GPU' + '%8s' % 'PID'
+    proc_header = proc_header + '%60s' % 'Process Name' + '%14s' % 'Mem. Use'
+    scr.addstr(proc_startline + 1, 0, proc_header)
+    scr.addstr(proc_startline + 2, 0, '-' * width)
+    proc_endline = proc_startline + 3
+
+    footer_startline = proc_endline + nproc + 10
+
 
 # ---Main Section---
 if __name__ == '__main__':
@@ -115,12 +147,15 @@ if __name__ == '__main__':
     scr = crs.initscr()
     scr.keypad(1)
     win_max = scr.getmaxyx()
+    exit_msg = []
     try:
-        
-        width = 94
-        if width > win_max[1]:
+
+        min_width = 94
+        if min_width > win_max[1]:
+            exit_msg.append('terminal too small')
             raise Exception('terminal too small')
-        
+        width = win_max[1]
+
         data = sp.check_output(['nvidia-smi', '-q', '-x'])
         root = ET.fromstring(data)
 
@@ -129,50 +164,47 @@ if __name__ == '__main__':
         ngpu = int(root.find('attached_gpus').text)
         nproc = count_procs(root)
 
-        scr.addstr(0, 0, 'nvidia-top' + '%*s' % (width-10, 'ESC to quit'))
         scr.addstr(1, 0, 'Timestamp:\t' + timestamp)
         scr.addstr(2, 0, 'Driver Version:\t' + driver)
         scr.addstr(3, 0, 'Number of GPUs:\t' + repr(ngpu))
-    
+
         # Drawing GPU Header
         gpu_startline = 5
-        scr.addstr(gpu_startline, 0, '-' * width)
-        scr.addstr(gpu_startline + 1, 0, '%3s' % '#' + '%25s' % 'Name' + '%20s' % 'Mem. Use' + '%15s' % 'Mem. Use' + '%20s' % 'Pow. Use' + '%10s' % 'Temp.')
-        scr.addstr(gpu_startline + 2, 0, '-' * width)
         gpu_endline = gpu_startline + 3
-        
+
         # Drawing Proc Header
         proc_startline = gpu_endline + ngpu + 2
-        scr.addstr(proc_startline, 0, '-' * width)
-        scr.addstr(proc_startline + 1, 0, '%3s' % '#' + '%8s' % 'GPU' + '%8s' % 'PID' + '%60s' % 'Process Name' + '%14s' % 'Mem. Use')
-        scr.addstr(proc_startline + 2, 0, '-' * width)
         proc_endline = proc_startline + 3
 
         footer_startline = proc_endline + nproc + 10
 
+        redraw_decorations(scr, ngpu, nproc)
         # 10 tenths = 1 sec <- this is the polling frequency
         crs.halfdelay(10)
-        
+
         while (1):
-            
+            if width != scr.getmaxyx()[1]:
+                redraw_decorations(scr, ngpu, nproc)
+
             data = sp.check_output(['nvidia-smi', '-q', '-x'])
             root = ET.fromstring(data)
-            
+
             timestamp = root.find('timestamp').text
             scr.addstr(1, 0, 'Timestamp:\t' + timestamp)
-            
+
             display_gpu_info(root, scr, gpu_endline)
             display_proc_info(root, scr, proc_endline)
 
             scr.refresh()
-            
+
             key = scr.getch()
             if (key == 27):
                 break
-                
-    except:
-        crs.endwin()
-        print ('Something went wrong! Exception handling is pretty basic right now.')
-        raise
-                
+
+    except Exception:
+        exit_msg.append(
+            'Something went wrong! Exception handling '
+            'is pretty basic right now.')
+
     crs.endwin()
+    print('\n'.join(exit_msg))
