@@ -79,6 +79,8 @@ def display_proc_info(root, scr, start_line):
     gpunum = 0
     pnum = 0
 
+    name_width = scr.getmaxyx()[1] - 44
+    disp_width = name_width + 10
     for gpu in root.findall('gpu'):
         procs = ET.Element('processes')
         for pro in ['processes', 'compute_processes', 'accounted_processes']:
@@ -89,12 +91,12 @@ def display_proc_info(root, scr, start_line):
 
             pid = proc.find('pid').text
             name = proc.find('process_name').text
-            if len(name) > 50:
-                name = name[0:50] + '...'
+            if len(name) > name_width:
+                name = name[0:name_width] + '...'
             memuse = proc.find('used_memory').text
 
             line = '%3s' % repr(pnum) + '%8s' % repr(gpunum+1) + '%8s' % pid
-            line = line + '%60s' % name + '%14s' % memuse
+            line = line + '%{0}s'.format(disp_width) % name + '%14s ' % memuse
             scr.addstr(pnum + start_line, 0, line)
             pnum = pnum + 1
 
@@ -115,7 +117,6 @@ def redraw_decorations(scr, ngpu, nproc):
     width = scr.getmaxyx()[1]
     min_width = 94
     if min_width > width:
-        exit_msg.append('terminal too small')
         raise Exception('terminal too small')
 
     scr.addstr(0, 0, 'nvidia-top' + '%*s' % (width-10, 'ESC to quit'))
@@ -133,7 +134,8 @@ def redraw_decorations(scr, ngpu, nproc):
     proc_startline = gpu_endline + ngpu + 2
     scr.addstr(proc_startline, 0, '-' * width)
     proc_header = '%3s' % '#' + '%8s' % 'GPU' + '%8s' % 'PID'
-    proc_header = proc_header + '%60s' % 'Process Name' + '%14s' % 'Mem. Use'
+    proc_header = proc_header + '%{0}s'.format(width-34) % 'Process Name'
+    proc_header = proc_header + '%14s ' % 'Mem. Use'
     scr.addstr(proc_startline + 1, 0, proc_header)
     scr.addstr(proc_startline + 2, 0, '-' * width)
     proc_endline = proc_startline + 3
@@ -152,7 +154,6 @@ if __name__ == '__main__':
 
         min_width = 94
         if min_width > win_max[1]:
-            exit_msg.append('terminal too small')
             raise Exception('terminal too small')
         width = win_max[1]
 
@@ -201,10 +202,11 @@ if __name__ == '__main__':
             if (key == 27):
                 break
 
-    except Exception:
+    except Exception as e:
         exit_msg.append(
             'Something went wrong! Exception handling '
             'is pretty basic right now.')
+        exit_msg.append(str(e))
 
     crs.endwin()
     print('\n'.join(exit_msg))
