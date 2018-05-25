@@ -49,7 +49,7 @@ def display_gpu_info(root, scr, start_line):
             line = line + '%24s*' % name
         else:
             line = line + '%25s' % name
-        line = line + '%20s' % memuse + '%15.2f%%' % usage + '%20s' % powuse
+        line = line + '%20s' % memuse + '%14.2f%%' % usage + '%20s' % powuse
         line = line + '%10s' % temp
 
         scr.addstr(gpunum + start_line, 0, line)
